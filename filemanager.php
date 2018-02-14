@@ -2,10 +2,12 @@
 /**
  * PHP File Manager (2017-08-07)
  * https://github.com/alexantr/filemanager
+ * Forked by embbeded-solutions company 
+ * https://github.com/microdaq/filemanager
  */
 
 // Auth with login/password (set true/false to enable/disable it)
-$use_auth = true;
+$use_auth = false;
 
 // Users: array('Username' => 'Password', 'Username2' => 'Password2', ...)
 $auth_users = array(
@@ -22,11 +24,11 @@ $highlightjs_style = 'vs';
 $default_timezone = 'Europe/Minsk'; // UTC+3
 
 // Root path for file manager
-$root_path = $_SERVER['DOCUMENT_ROOT'];
+$root_path = '/mnt/user-disk';
 
 // Root url for links in file manager.Relative to $http_host. Variants: '', 'path/to/subfolder'
 // Will not working if $root_path will be outside of server document root
-$root_url = '';
+$root_url = '/user-disk/';
 
 // Server hostname. Can set manually if wrong
 $http_host = $_SERVER['HTTP_HOST'];
@@ -45,7 +47,7 @@ if (defined('FM_EMBED')) {
 } else {
     @set_time_limit(600);
 
-    date_default_timezone_set($default_timezone);
+    //date_default_timezone_set($default_timezone);
 
     ini_set('default_charset', 'UTF-8');
     if (version_compare(PHP_VERSION, '5.6.0', '<') && function_exists('mb_internal_encoding')) {
@@ -131,13 +133,18 @@ if ($use_auth) {
 
 define('FM_IS_WIN', DIRECTORY_SEPARATOR == '\\');
 
+session_start();
 // always use ?p=
+if (!isset($_SESSION['last_path']))
+    $_SESSION['last_path'] = '';
+
 if (!isset($_GET['p'])) {
-    fm_redirect(FM_SELF_URL . '?p=');
+    fm_redirect(FM_SELF_URL . '?p='.$_SESSION['last_path']);
 }
 
-// get path
+// get p
 $p = isset($_GET['p']) ? $_GET['p'] : (isset($_POST['p']) ? $_POST['p'] : '');
+$_SESSION['last_path'] = $p;
 
 // clean path
 $p = fm_clean_path($p);
@@ -877,74 +884,6 @@ if (isset($_GET['view'])) {
     exit;
 }
 
-// chmod (not for Windows)
-if (isset($_GET['chmod']) && !FM_IS_WIN) {
-    $file = $_GET['chmod'];
-    $file = fm_clean_path($file);
-    $file = str_replace('/', '', $file);
-    if ($file == '' || (!is_file($path . '/' . $file) && !is_dir($path . '/' . $file))) {
-        fm_set_msg('File not found', 'error');
-        fm_redirect(FM_SELF_URL . '?p=' . urlencode(FM_PATH));
-    }
-
-    fm_show_header(); // HEADER
-    fm_show_nav_path(FM_PATH); // current path
-
-    $file_url = FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $file;
-    $file_path = $path . '/' . $file;
-
-    $mode = fileperms($path . '/' . $file);
-
-    ?>
-    <div class="path">
-        <p><b>Change Permissions</b></p>
-        <p>
-            Full path: <?php echo fm_enc($file_path) ?><br>
-        </p>
-        <form action="" method="post">
-            <input type="hidden" name="p" value="<?php echo fm_enc(FM_PATH) ?>">
-            <input type="hidden" name="chmod" value="<?php echo fm_enc($file) ?>">
-
-            <table class="compact-table">
-                <tr>
-                    <td></td>
-                    <td><b>Owner</b></td>
-                    <td><b>Group</b></td>
-                    <td><b>Other</b></td>
-                </tr>
-                <tr>
-                    <td style="text-align: right"><b>Read</b></td>
-                    <td><label><input type="checkbox" name="ur" value="1"<?php echo ($mode & 00400) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="gr" value="1"<?php echo ($mode & 00040) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="or" value="1"<?php echo ($mode & 00004) ? ' checked' : '' ?>></label></td>
-                </tr>
-                <tr>
-                    <td style="text-align: right"><b>Write</b></td>
-                    <td><label><input type="checkbox" name="uw" value="1"<?php echo ($mode & 00200) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="gw" value="1"<?php echo ($mode & 00020) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="ow" value="1"<?php echo ($mode & 00002) ? ' checked' : '' ?>></label></td>
-                </tr>
-                <tr>
-                    <td style="text-align: right"><b>Execute</b></td>
-                    <td><label><input type="checkbox" name="ux" value="1"<?php echo ($mode & 00100) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="gx" value="1"<?php echo ($mode & 00010) ? ' checked' : '' ?>></label></td>
-                    <td><label><input type="checkbox" name="ox" value="1"<?php echo ($mode & 00001) ? ' checked' : '' ?>></label></td>
-                </tr>
-            </table>
-
-            <p>
-                <button class="btn"><i class="icon-apply"></i> Change</button> &nbsp;
-                <b><a href="?p=<?php echo urlencode(FM_PATH) ?>"><i class="icon-cancel"></i> Cancel</a></b>
-            </p>
-
-        </form>
-
-    </div>
-    <?php
-    fm_show_footer();
-    exit;
-}
-
 //--- FILEMANAGER MAIN
 fm_show_header(); // HEADER
 fm_show_nav_path(FM_PATH); // current path
@@ -963,7 +902,6 @@ $all_files_size = 0;
 <th style="width:3%"><label><input type="checkbox" title="Invert selection" onclick="checkbox_toggle()"></label></th>
 <th>Name</th><th style="width:10%">Size</th>
 <th style="width:12%">Modified</th>
-<?php if (!FM_IS_WIN): ?><th style="width:6%">Perms</th><th style="width:10%">Owner</th><?php endif; ?>
 <th style="width:13%"></th></tr>
 <?php
 // link to parent folder
@@ -976,23 +914,11 @@ foreach ($folders as $f) {
     $is_link = is_link($path . '/' . $f);
     $img = $is_link ? 'icon-link_folder' : 'icon-folder';
     $modif = date(FM_DATETIME_FORMAT, filemtime($path . '/' . $f));
-    $perms = substr(decoct(fileperms($path . '/' . $f)), -4);
-    if (function_exists('posix_getpwuid') && function_exists('posix_getgrgid')) {
-        $owner = posix_getpwuid(fileowner($path . '/' . $f));
-        $group = posix_getgrgid(filegroup($path . '/' . $f));
-    } else {
-        $owner = array('name' => '?');
-        $group = array('name' => '?');
-    }
     ?>
 <tr>
 <td><label><input type="checkbox" name="file[]" value="<?php echo fm_enc($f) ?>"></label></td>
 <td><div class="filename"><a href="?p=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>"><i class="<?php echo $img ?>"></i> <?php echo fm_enc(fm_convert_win($f)) ?></a><?php echo ($is_link ? ' &rarr; <i>' . fm_enc(readlink($path . '/' . $f)) . '</i>' : '') ?></div></td>
 <td>Folder</td><td><?php echo $modif ?></td>
-<?php if (!FM_IS_WIN): ?>
-<td><a title="Change Permissions" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;chmod=<?php echo urlencode($f) ?>"><?php echo $perms ?></a></td>
-<td><?php echo fm_enc($owner['name'] . ':' . $group['name']) ?></td>
-<?php endif; ?>
 <td>
 <a title="Delete" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('Delete folder?');"><i class="icon-cross"></i></a>
 <a title="Rename" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;"><i class="icon-rename"></i></a>
@@ -1011,24 +937,13 @@ foreach ($files as $f) {
     $filesize = fm_get_filesize($filesize_raw);
     $filelink = '?p=' . urlencode(FM_PATH) . '&amp;view=' . urlencode($f);
     $all_files_size += $filesize_raw;
-    $perms = substr(decoct(fileperms($path . '/' . $f)), -4);
-    if (function_exists('posix_getpwuid') && function_exists('posix_getgrgid')) {
-        $owner = posix_getpwuid(fileowner($path . '/' . $f));
-        $group = posix_getgrgid(filegroup($path . '/' . $f));
-    } else {
-        $owner = array('name' => '?');
-        $group = array('name' => '?');
-    }
-    ?>
+?>
+
 <tr>
 <td><label><input type="checkbox" name="file[]" value="<?php echo fm_enc($f) ?>"></label></td>
 <td><div class="filename"><a href="<?php echo fm_enc($filelink) ?>" title="File info"><i class="<?php echo $img ?>"></i> <?php echo fm_enc(fm_convert_win($f)) ?></a><?php echo ($is_link ? ' &rarr; <i>' . fm_enc(readlink($path . '/' . $f)) . '</i>' : '') ?></div></td>
 <td><span class="gray" title="<?php printf('%s bytes', $filesize_raw) ?>"><?php echo $filesize ?></span></td>
 <td><?php echo $modif ?></td>
-<?php if (!FM_IS_WIN): ?>
-<td><a title="Change Permissions" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;chmod=<?php echo urlencode($f) ?>"><?php echo $perms ?></a></td>
-<td><?php echo fm_enc($owner['name'] . ':' . $group['name']) ?></td>
-<?php endif; ?>
 <td>
 <a title="Delete" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('Delete file?');"><i class="icon-cross"></i></a>
 <a title="Rename" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;"><i class="icon-rename"></i></a>
@@ -1059,7 +974,7 @@ folders: <?php echo $num_folders ?>
 <a href="#" onclick="unselect_all();return false;"><i class="icon-checkbox_uncheck"></i> Unselect all</a> &nbsp;
 <a href="#" onclick="invert_all();return false;"><i class="icon-checkbox_invert"></i> Invert selection</a></p>
 <p><input type="submit" name="delete" value="Delete" onclick="return confirm('Delete selected files and folders?')">
-<input type="submit" name="zip" value="Pack" onclick="return confirm('Create archive?')">
+<!-- <input type="submit" name="zip" value="Pack" onclick="return confirm('Create archive?')"> -->
 <input type="submit" name="copy" value="Copy"></p>
 </form>
 
@@ -1717,7 +1632,7 @@ function fm_show_header()
 <title>PHP File Manager</title>
 <style>
 html,body,div,span,p,pre,a,code,em,img,small,strong,ol,ul,li,form,label,table,tr,th,td{margin:0;padding:0;vertical-align:baseline;outline:none;font-size:100%;background:transparent;border:none;text-decoration:none}
-html{overflow-y:scroll}body{padding:0;font:13px/16px Tahoma,Arial,sans-serif;color:#222;background:#efefef}
+html{overflow-y:scroll}body{padding:0;font:13px/16px Tahoma,Arial,sans-serif;color:#222;background:#ffffff}
 input,select,textarea,button{font-size:inherit;font-family:inherit}
 a{color:#296ea3;text-decoration:none}a:hover{color:#b00}img{vertical-align:middle;border:none}
 a img{border:none}span.gray{color:#777}small{font-size:11px;color:#999}p{margin-bottom:10px}
@@ -1730,7 +1645,7 @@ code,pre{display:block;margin-bottom:10px;font:13px/16px Consolas,'Courier New',
 pre.with-hljs{padding:0}
 pre.with-hljs code{margin:0;border:0;overflow:visible}
 code.maxheight,pre.maxheight{max-height:512px}input[type="checkbox"]{margin:0;padding:0}
-#wrapper{max-width:1000px;min-width:400px;margin:10px auto}
+#wrapper{max-width:1000px;min-width:400px; padding-top:10px}
 .path{padding:4px 7px;border:1px solid #ddd;background-color:#fff;margin-bottom:10px}
 .right{text-align:right}.center{text-align:center}.float-right{float:right}
 .message{padding:4px 7px;border:1px solid #ddd;background-color:#fff}
