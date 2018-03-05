@@ -932,28 +932,56 @@ foreach ($folders as $f) {
 foreach ($files as $f) {
     $is_link = is_link($path . '/' . $f);
     $img = $is_link ? 'icon-link_file' : fm_get_file_icon_class($path . '/' . $f);
+    $ext = strtolower(pathinfo($path . '/' . $f, PATHINFO_EXTENSION));
     $modif = date(FM_DATETIME_FORMAT, filemtime($path . '/' . $f));
     $filesize_raw = filesize($path . '/' . $f);
     $filesize = fm_get_filesize($filesize_raw);
+
+    // Workaround to print filesize larger than 2 GB (32bit integer PHP issue?) 
+    if ($filesize<0)
+        $filesize = shell_exec("du -h ".$path . '/' . $f." | awk '{print $1;}'");
+
     $filelink = '?p=' . urlencode(FM_PATH) . '&amp;view=' . urlencode($f);
-    $all_files_size += $filesize_raw;
+    $filefullpath = str_replace('/mnt', '', $path.'/'.$f);
 ?>
 
 <tr>
 <td><label><input type="checkbox" name="file[]" value="<?php echo fm_enc($f) ?>"></label></td>
-<td><div class="filename"><a href="<?php echo fm_enc($filelink) ?>" title="File info"><i class="<?php echo $img ?>"></i> <?php echo fm_enc(fm_convert_win($f)) ?></a><?php echo ($is_link ? ' &rarr; <i>' . fm_enc(readlink($path . '/' . $f)) . '</i>' : '') ?></div></td>
+<?php
+    if ($ext == 'csv'){   
+        echo '<td><div class="filename"><a href="../api/recorder/preview_data.php?filename='.$filefullpath.'" target="_blank"><i class="'.$img.'"></i>'.fm_enc(fm_convert_win($f)).'</a>'.($is_link ? ' &rarr; <i>' . fm_enc(readlink($path . '/' . $f)) . '</i>' : '').'</div></td>';
+    }else{
+        echo '<td><div class="filename"><a href="'.fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f).'" target="_blank"><i class="'.$img.'"></i>'.fm_enc(fm_convert_win($f)).'</a>'.($is_link ? ' &rarr; <i>' . fm_enc(readlink($path . '/' . $f)) . '</i>' : '').'</div></td>';
+    }
+?>
+
 <td><span class="gray" title="<?php printf('%s bytes', $filesize_raw) ?>"><?php echo $filesize ?></span></td>
 <td><?php echo $modif ?></td>
 <td>
 <a title="Delete" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;del=<?php echo urlencode($f) ?>" onclick="return confirm('Delete file?');"><i class="icon-cross"></i></a>
 <a title="Rename" href="#" onclick="rename('<?php echo fm_enc(FM_PATH) ?>', '<?php echo fm_enc($f) ?>');return false;"><i class="icon-rename"></i></a>
 <a title="Copy to..." href="?p=<?php echo urlencode(FM_PATH) ?>&amp;copy=<?php echo urlencode(trim(FM_PATH . '/' . $f, '/')) ?>"><i class="icon-copy"></i></a>
-<a title="Direct link" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f) ?>" target="_blank"><i class="icon-chain"></i></a>
-<a title="Download" href="?p=<?php echo urlencode(FM_PATH) ?>&amp;dl=<?php echo urlencode($f) ?>"><i class="icon-download"></i></a>
+<a title="Download" href="<?php echo fm_enc(FM_ROOT_URL . (FM_PATH != '' ? '/' . FM_PATH : '') . '/' . $f) ?>" target="_blank"><i class="icon-download"></i></a>
+
+<?php
+    switch($ext){
+        case 'csv':
+            echo '<a title="Preview" href="../api/recorder/preview_data.php?filename='.$filefullpath.'" target="_blank"><i class="preview-icon"></i></a>';
+            break;   
+            
+        case 'out':
+            echo '<a title="Run on DSP" href="../api/dsp_load.php?filename='.$filefullpath.'" target="_blank"><i class="run-icon"></i></a>';
+            break;   
+    }
+?>
+
 </td></tr>
     <?php
     flush();
 }
+
+// Workaround to print total size larger than 2 GB (32bit integer PHP issue?) 
+$all_files_size = shell_exec("du -sh ".$path . "/ | awk '{print $1;}'");
 
 if (empty($folders) && empty($files)) {
     ?>
@@ -962,7 +990,7 @@ if (empty($folders) && empty($files)) {
 } else {
     ?>
 <tr><td class="gray"></td><td class="gray" colspan="<?php echo !FM_IS_WIN ? '6' : '4' ?>">
-Full size: <span title="<?php printf('%s bytes', $all_files_size) ?>"><?php echo fm_get_filesize($all_files_size) ?></span>,
+Total size: <span title="<?php echo $all_files_size ?>"><?php echo $all_files_size ?></span>,
 files: <?php echo $num_files ?>,
 folders: <?php echo $num_folders ?>
 </td></tr>
@@ -1655,6 +1683,8 @@ code.maxheight,pre.maxheight{max-height:512px}input[type="checkbox"]{margin:0;pa
 .btn{border:0;background:none;padding:0;margin:0;font-weight:bold;color:#296ea3;cursor:pointer}.btn:hover{color:#b00}
 .preview-img{max-width:100%;background:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAKklEQVR42mL5//8/Azbw+PFjrOJMDCSCUQ3EABZc4S0rKzsaSvTTABBgAMyfCMsY4B9iAAAAAElFTkSuQmCC") repeat 0 0}
 .preview-video{position:relative;max-width:100%;height:0;padding-bottom:62.5%;margin-bottom:10px}.preview-video video{position:absolute;width:100%;height:100%;left:0;top:0;background:#000}
+.preview-icon{display:inline-block;width:16px;height:16px;background:url("img/magnifier-icon.png") no-repeat 0 0;vertical-align:bottom}
+.run-icon{display:inline-block;width:16px;height:16px;background:url("img/run-icon.png") no-repeat 0 0;vertical-align:bottom}
 [class*="icon-"]{display:inline-block;width:16px;height:16px;background:url("<?php echo FM_SELF_URL ?>?img=sprites&amp;t=<?php echo $sprites_ver ?>") no-repeat 0 0;vertical-align:bottom}
 .icon-document{background-position:-16px 0}.icon-folder{background-position:-32px 0}
 .icon-folder_add{background-position:-48px 0}.icon-upload{background-position:-64px 0}
